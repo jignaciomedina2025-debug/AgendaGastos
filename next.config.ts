@@ -6,10 +6,12 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development",
   register: true,
   fallbacks: {
-    document: "/offline",
+    document: "/offline/",
   },
   workboxOptions: {
     disableDevLogs: true,
+    // Cloudflare config files are not public assets; precaching them breaks the SW.
+    exclude: [/_headers$/, /_redirects$/],
   },
 });
 
