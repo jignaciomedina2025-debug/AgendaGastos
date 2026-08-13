@@ -18,25 +18,65 @@ service cloud.firestore {
       return hasProfile() && userDoc().familyId == familyId;
     }
 
+    function familyDoc(familyId) {
+      return get(/databases/$(database)/documents/families/$(familyId)).data;
+    }
+
     match /users/{userId} {
       allow read: if signedIn() && (
         request.auth.uid == userId ||
         (hasProfile() && resource.data.familyId == userDoc().familyId)
       );
+
+      // Join only as family creator OR with a valid invite code document.
       allow create: if signedIn()
         && request.auth.uid == userId
         && request.resource.data.email is string
-        && request.resource.data.familyId is string;
-      allow update: if signedIn() && request.auth.uid == userId;
+        && request.resource.data.familyId is string
+        && exists(/databases/$(database)/documents/families/$(request.resource.data.familyId))
+        && (
+          familyDoc(request.resource.data.familyId).createdBy == request.auth.uid
+          || (
+            request.resource.data.keys().hasAll(['joinedWithCode'])
+            && request.resource.data.joinedWithCode is string
+            && exists(/databases/$(database)/documents/family_invites/$(request.resource.data.joinedWithCode))
+            && get(/databases/$(database)/documents/family_invites/$(request.resource.data.joinedWithCode)).data.familyId
+              == request.resource.data.familyId
+          )
+        );
+
+      // Cannot switch families after signup.
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.familyId == resource.data.familyId;
     }
 
     match /families/{familyId} {
-      // Needed during registration (invite lookup) before profile exists.
-      allow read: if signedIn();
+      allow get: if signedIn() && (
+        sameFamily(familyId) ||
+        resource.data.createdBy == request.auth.uid
+      );
+      // Prevent scanning all families / invite codes.
+      allow list: if false;
       allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.inviteCode is string;
-      allow update: if sameFamily(familyId);
+      allow update: if sameFamily(familyId)
+        && request.resource.data.inviteCode == resource.data.inviteCode
+        && request.resource.data.createdBy == resource.data.createdBy;
+    }
+
+    // Invite lookup by exact code (document ID). No listing.
+    match /family_invites/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.familyId is string
+        && request.resource.data.inviteCode == code
+        && exists(/databases/$(database)/documents/families/$(request.resource.data.familyId))
+        && familyDoc(request.resource.data.familyId).createdBy == request.auth.uid
+        && familyDoc(request.resource.data.familyId).inviteCode == code;
+      allow update, delete: if false;
     }
 
     match /purchases/{purchaseId} {
@@ -44,7 +84,9 @@ service cloud.firestore {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid
         && sameFamily(request.resource.data.familyId);
-      allow update: if sameFamily(resource.data.familyId);
+      allow update: if sameFamily(resource.data.familyId)
+        && request.resource.data.familyId == resource.data.familyId;
+      allow delete: if sameFamily(resource.data.familyId);
     }
 
     match /cards/{cardId} {

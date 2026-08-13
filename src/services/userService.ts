@@ -14,6 +14,7 @@ import type { Family, ServiceResult, User } from "@/types/finance";
 
 const USERS_COLLECTION = "users";
 const FAMILIES_COLLECTION = "families";
+const INVITES_COLLECTION = "family_invites";
 
 function mapUser(id: string, data: DocumentData): User {
   return {
@@ -68,7 +69,9 @@ export async function getFamilyById(familyId: string): Promise<ServiceResult<Fam
     if (!snap.exists()) {
       return { success: false, error: "Familia no encontrada." };
     }
-    return { success: true, data: mapFamily(snap.id, snap.data()) };
+    const family = mapFamily(snap.id, snap.data());
+    await ensureFamilyInvite(family);
+    return { success: true, data: family };
   } catch (error) {
     return {
       success: false,
@@ -77,6 +80,9 @@ export async function getFamilyById(familyId: string): Promise<ServiceResult<Fam
   }
 }
 
+/**
+ * Invite lookup by document ID = code (no collection scan).
+ */
 export async function findFamilyByInviteCode(
   inviteCode: string,
 ): Promise<ServiceResult<Family>> {
@@ -86,25 +92,61 @@ export async function findFamilyByInviteCode(
       return { success: false, error: "Ingresa un código de familia." };
     }
 
-    const snap = await getDocs(
-      query(
-        collection(getFirestoreDb(), FAMILIES_COLLECTION),
-        where("inviteCode", "==", normalized),
-      ),
+    const inviteSnap = await getDoc(
+      doc(getFirestoreDb(), INVITES_COLLECTION, normalized),
     );
 
-    if (snap.empty) {
+    if (!inviteSnap.exists()) {
       return { success: false, error: "Código de familia inválido." };
     }
 
-    const familyDoc = snap.docs[0];
-    return { success: true, data: mapFamily(familyDoc.id, familyDoc.data()) };
+    const invite = inviteSnap.data();
+    const familyId = String(invite.familyId ?? "");
+    if (!familyId) {
+      return { success: false, error: "Código de familia inválido." };
+    }
+
+    return {
+      success: true,
+      data: {
+        id: familyId,
+        name: String(invite.familyName ?? "Familia"),
+        inviteCode: normalized,
+        createdBy: String(invite.createdBy ?? ""),
+        createdAt:
+          invite.createdAt instanceof Timestamp
+            ? invite.createdAt.toDate()
+            : new Date(),
+      },
+    };
   } catch (error) {
     return {
       success: false,
       error:
         error instanceof Error ? error.message : "No se pudo validar el código.",
     };
+  }
+}
+
+/** Creates invite doc for older families that predate this security model. */
+export async function ensureFamilyInvite(family: Family): Promise<void> {
+  if (!family.inviteCode || !family.id) return;
+
+  const inviteRef = doc(getFirestoreDb(), INVITES_COLLECTION, family.inviteCode);
+  const existing = await getDoc(inviteRef);
+  if (existing.exists()) return;
+
+  // Only the creator can create the invite doc under current rules.
+  try {
+    await setDoc(inviteRef, {
+      familyId: family.id,
+      familyName: family.name,
+      inviteCode: family.inviteCode,
+      createdBy: family.createdBy,
+      createdAt: Timestamp.now(),
+    });
+  } catch {
+    // Non-creators may not have permission; join still works if invite exists.
   }
 }
 
@@ -117,7 +159,10 @@ export async function getFamilyMembers(
     }
 
     const snap = await getDocs(
-      query(collection(getFirestoreDb(), USERS_COLLECTION), where("familyId", "==", familyId)),
+      query(
+        collection(getFirestoreDb(), USERS_COLLECTION),
+        where("familyId", "==", familyId),
+      ),
     );
 
     const members = snap.docs
@@ -159,12 +204,14 @@ export async function createUserProfileWithFamily(
     }
 
     let family: Family;
+    let joinedWithCode: string | undefined;
     const now = Timestamp.now();
 
     if (input.inviteCode?.trim()) {
       const found = await findFamilyByInviteCode(input.inviteCode);
       if (!found.success) return found;
       family = found.data;
+      joinedWithCode = family.inviteCode;
     } else {
       const familyRef = doc(collection(getFirestoreDb(), FAMILIES_COLLECTION));
       const inviteCode = generateInviteCode();
@@ -175,16 +222,29 @@ export async function createUserProfileWithFamily(
         createdAt: now,
       };
       await setDoc(familyRef, familyPayload);
+
+      await setDoc(doc(getFirestoreDb(), INVITES_COLLECTION, inviteCode), {
+        familyId: familyRef.id,
+        familyName: familyPayload.name,
+        inviteCode,
+        createdBy: input.uid,
+        createdAt: now,
+      });
+
       family = mapFamily(familyRef.id, familyPayload);
     }
 
-    const userPayload = {
+    const userPayload: Record<string, unknown> = {
       name,
       email,
       familyId: family.id,
       isActive: true,
       createdAt: now,
     };
+
+    if (joinedWithCode) {
+      userPayload.joinedWithCode = joinedWithCode;
+    }
 
     await setDoc(doc(getFirestoreDb(), USERS_COLLECTION, input.uid), userPayload, {
       merge: true,
