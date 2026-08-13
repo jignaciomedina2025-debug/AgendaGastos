@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Finanzas Familiares",
+  title: "Finanzas Familiares v2",
   description: "PWA de gestión financiera familiar",
   applicationName: "Finanzas Familiares",
   manifest: "/manifest.json",
@@ -60,6 +60,22 @@ export default function RootLayout({
         <meta name="theme-color" content="#0f766e" />
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+(function () {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(function (regs) {
+    regs.forEach(function (reg) { reg.unregister(); });
+  });
+  if (window.caches) {
+    caches.keys().then(function (keys) {
+      keys.forEach(function (key) { caches.delete(key); });
+    });
+  }
+})();`,
+          }}
+        />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased font-sans`}>
         <ServiceWorkerCleanup />
