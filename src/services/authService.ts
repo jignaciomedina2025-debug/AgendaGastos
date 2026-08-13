@@ -6,6 +6,7 @@ import {
   updateProfile,
   type User as FirebaseUser,
 } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { getFirebaseAuth } from "@/lib/firebase";
 import type { Family, ServiceResult, User } from "@/types/finance";
 import {
@@ -23,12 +24,18 @@ export type AuthSession = {
 };
 
 function mapAuthError(error: unknown): string {
-  if (!(error instanceof Error)) return "Error de autenticación.";
-  const code = "code" in error ? String((error as { code?: string }).code) : "";
+  const code =
+    error instanceof FirebaseError
+      ? error.code
+      : error instanceof Error && "code" in error
+        ? String((error as { code?: string }).code)
+        : "";
+  const message =
+    error instanceof Error ? error.message : "Error de autenticación.";
 
   switch (code) {
     case "auth/email-already-in-use":
-      return "Ese email ya está registrado.";
+      return "Ese email ya está registrado. Prueba iniciar sesión.";
     case "auth/invalid-email":
       return "Email inválido.";
     case "auth/weak-password":
@@ -43,13 +50,12 @@ function mapAuthError(error: unknown): string {
       return "Email/contraseña no está habilitado en Firebase Authentication.";
     case "auth/unauthorized-domain":
       return "Este dominio no está autorizado en Firebase Authentication.";
-    case "auth/api-key-not-valid.--please-pass-a-valid-api-key.":
     case "auth/invalid-api-key":
       return "API key de Firebase inválida.";
+    case "auth/network-request-failed":
+      return "Error de red. Revisa tu conexión o desactiva bloqueadores.";
     default:
-      return code
-        ? `${error.message} (${code})`
-        : error.message || "Error de autenticación.";
+      return code ? `${message} [${code}]` : message;
   }
 }
 
