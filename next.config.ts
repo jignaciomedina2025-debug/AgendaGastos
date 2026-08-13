@@ -1,19 +1,4 @@
 import type { NextConfig } from "next";
-import withPWAInit from "@ducanh2912/next-pwa";
-
-const withPWA = withPWAInit({
-  dest: "public",
-  disable: process.env.NODE_ENV === "development",
-  register: true,
-  fallbacks: {
-    document: "/offline/",
-  },
-  workboxOptions: {
-    disableDevLogs: true,
-    // Cloudflare config files are not public assets; precaching them breaks the SW.
-    exclude: [/_headers$/, /_redirects$/],
-  },
-});
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -25,4 +10,4 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
 };
 
-export default withPWA(nextConfig);
+export default nextConfig;
