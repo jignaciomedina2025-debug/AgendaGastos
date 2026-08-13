@@ -11,24 +11,56 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-function createFirebaseApp(): FirebaseApp {
+function hasFirebaseConfig(): boolean {
+  return Object.values(firebaseConfig).every(Boolean);
+}
+
+let app: FirebaseApp | null = null;
+let authInstance: Auth | null = null;
+let dbInstance: Firestore | null = null;
+
+export function getFirebaseApp(): FirebaseApp {
+  if (app) return app;
+
   if (getApps().length > 0) {
-    return getApp();
+    app = getApp();
+    return app;
   }
 
-  const missing = Object.entries(firebaseConfig)
-    .filter(([, value]) => !value)
-    .map(([key]) => key);
-
-  if (missing.length > 0) {
+  if (!hasFirebaseConfig()) {
     throw new Error(
-      `Missing Firebase env vars: ${missing.join(", ")}. Copy .env.example to .env.local.`,
+      "Missing NEXT_PUBLIC_FIREBASE_* env vars. Add them in Cloudflare Pages or .env.production.",
     );
   }
 
-  return initializeApp(firebaseConfig);
+  app = initializeApp(firebaseConfig);
+  return app;
 }
 
-export const firebaseApp: FirebaseApp = createFirebaseApp();
-export const auth: Auth = getAuth(firebaseApp);
-export const db: Firestore = getFirestore(firebaseApp);
+export function getFirebaseAuth(): Auth {
+  if (!authInstance) {
+    authInstance = getAuth(getFirebaseApp());
+  }
+  return authInstance;
+}
+
+export function getFirestoreDb(): Firestore {
+  if (!dbInstance) {
+    dbInstance = getFirestore(getFirebaseApp());
+  }
+  return dbInstance;
+}
+
+/** @deprecated Prefer getFirebaseAuth() — kept for shorter imports. */
+export const auth: Auth = new Proxy({} as Auth, {
+  get(_target, property, receiver) {
+    return Reflect.get(getFirebaseAuth() as object, property, receiver);
+  },
+});
+
+/** @deprecated Prefer getFirestoreDb() — kept for shorter imports. */
+export const db: Firestore = new Proxy({} as Firestore, {
+  get(_target, property, receiver) {
+    return Reflect.get(getFirestoreDb() as object, property, receiver);
+  },
+});
