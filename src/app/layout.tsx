@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Finanzas Familiares v2",
+  title: "Finanzas Familiares",
   description: "PWA de gestión financiera familiar",
   applicationName: "Finanzas Familiares",
   manifest: "/manifest.json",

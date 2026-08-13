@@ -47,6 +47,16 @@ service cloud.firestore {
       allow update: if sameFamily(resource.data.familyId);
     }
 
+    match /cards/{cardId} {
+      allow read: if sameFamily(resource.data.familyId);
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && sameFamily(request.resource.data.familyId)
+        && request.resource.data.brand is string
+        && request.resource.data.lastFour is string;
+      allow update, delete: if sameFamily(resource.data.familyId);
+    }
+
     match /monthly_statements/{statementId} {
       allow read: if signedIn() && resource.data.userId == request.auth.uid;
       allow write: if false;

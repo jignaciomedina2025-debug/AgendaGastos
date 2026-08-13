@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { addPurchase } from "@/services/purchaseService";
+import { formatCardLabel } from "@/services/cardService";
 import type {
   InterestType,
   NewPurchaseInput,
+  PaymentCard,
   Purchase,
   PurchaseStatus,
   User,
@@ -14,6 +16,7 @@ import { formatCurrency } from "@/utils/currency";
 
 export type PurchaseFormValues = {
   title: string;
+  cardId: string;
   cardOrStore: string;
   totalAmount: string;
   installmentsCount: number;
@@ -29,9 +32,11 @@ export type PurchaseFormProps = {
   currentUserId: string;
   familyId: string;
   familyMembers: User[];
+  cards: PaymentCard[];
   /** When true, skips Firestore and returns a mock success response. */
   simulateSubmission?: boolean;
   onSuccess?: (purchase: Purchase) => void;
+  onRequestAddCard?: () => void;
 };
 
 type SubmitState = "idle" | "loading" | "success" | "error";
@@ -69,8 +74,10 @@ export function PurchaseForm({
   currentUserId,
   familyId,
   familyMembers,
+  cards,
   simulateSubmission = false,
   onSuccess,
+  onRequestAddCard,
 }: PurchaseFormProps) {
   const [submitState, setSubmitState] = useState<SubmitState>("idle");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -85,7 +92,8 @@ export function PurchaseForm({
   } = useForm<PurchaseFormValues>({
     defaultValues: {
       title: "",
-      cardOrStore: "",
+      cardId: cards[0]?.id ?? "",
+      cardOrStore: cards[0] ? formatCardLabel(cards[0]) : "",
       totalAmount: "",
       installmentsCount: 1,
       interestType: "NO_INTEREST",
@@ -105,6 +113,18 @@ export function PurchaseForm({
   const isShared = useWatch({ control, name: "isShared" });
   const isGift = useWatch({ control, name: "isGift" });
   const splitBetweenUserIds = useWatch({ control, name: "splitBetweenUserIds" });
+  const selectedCardId = useWatch({ control, name: "cardId" });
+
+  useEffect(() => {
+    if (!selectedCardId) {
+      setValue("cardOrStore", "");
+      return;
+    }
+    const selected = cards.find((card) => card.id === selectedCardId);
+    if (selected) {
+      setValue("cardOrStore", formatCardLabel(selected), { shouldValidate: true });
+    }
+  }, [selectedCardId, cards, setValue]);
 
   const totalAmount = parseAmount(totalAmountRaw ?? "");
   const installmentValue = parseAmount(installmentValueRaw ?? "");
@@ -156,6 +176,7 @@ export function PurchaseForm({
       familyId,
       title: values.title.trim(),
       cardOrStore: values.cardOrStore.trim(),
+      cardId: values.cardId || undefined,
       totalAmount: parsedTotal,
       installmentsCount: Number(values.installmentsCount),
       installmentValue: hasExactInstallment ? parsedInstallment : undefined,
@@ -186,7 +207,8 @@ export function PurchaseForm({
         onSuccess?.(simulated);
         reset({
           title: "",
-          cardOrStore: values.cardOrStore,
+          cardId: cards[0]?.id ?? "",
+          cardOrStore: cards[0] ? formatCardLabel(cards[0]) : "",
           totalAmount: "",
           installmentsCount: 1,
           interestType: "NO_INTEREST",
@@ -210,7 +232,8 @@ export function PurchaseForm({
       onSuccess?.(result.data);
       reset({
         title: "",
-        cardOrStore: values.cardOrStore,
+        cardId: cards[0]?.id ?? "",
+        cardOrStore: cards[0] ? formatCardLabel(cards[0]) : "",
         totalAmount: "",
         installmentsCount: 1,
         interestType: "NO_INTEREST",
@@ -260,23 +283,56 @@ export function PurchaseForm({
           />
         </Field>
 
-        <Field label="Tarjeta o tienda" error={errors.cardOrStore?.message}>
-          <input
-            type="text"
-            list="card-or-store-suggestions"
-            placeholder="Visa ****1234 / Falabella"
-            className={inputClass(Boolean(errors.cardOrStore))}
-            {...register("cardOrStore", {
-              required: "Indica la tarjeta o tienda",
-            })}
-          />
-          <datalist id="card-or-store-suggestions">
-            <option value="Visa" />
-            <option value="Mastercard" />
-            <option value="American Express" />
-            <option value="Mercado Pago" />
-            <option value="Tienda" />
-          </datalist>
+        <Field label="Tarjeta" error={errors.cardId?.message || errors.cardOrStore?.message}>
+          {cards.length === 0 ? (
+            <div className="space-y-2 rounded-2xl border border-dashed border-[#d7e0db] bg-[#f8fbf9] px-3.5 py-3">
+              <p className="text-sm text-[#5b6b64]">
+                Primero guarda una tarjeta (CMR, Ripley, etc.).
+              </p>
+              {onRequestAddCard ? (
+                <button
+                  type="button"
+                  onClick={onRequestAddCard}
+                  className="text-sm font-semibold text-teal-800 underline-offset-2 hover:underline"
+                >
+                  Ir a Tarjetas
+                </button>
+              ) : null}
+              <input type="hidden" {...register("cardOrStore")} />
+              <input
+                type="hidden"
+                {...register("cardId", {
+                  required: "Agrega una tarjeta antes de registrar la compra",
+                })}
+              />
+            </div>
+          ) : (
+            <>
+              <select
+                className={inputClass(Boolean(errors.cardId))}
+                {...register("cardId", {
+                  required: "Selecciona una tarjeta",
+                })}
+              >
+                <option value="">Selecciona una tarjeta</option>
+                {cards.map((card) => (
+                  <option key={card.id} value={card.id}>
+                    {formatCardLabel(card)}
+                  </option>
+                ))}
+              </select>
+              <input type="hidden" {...register("cardOrStore", { required: true })} />
+              {onRequestAddCard ? (
+                <button
+                  type="button"
+                  onClick={onRequestAddCard}
+                  className="mt-1 text-xs font-medium text-teal-800"
+                >
+                  + Agregar otra tarjeta
+                </button>
+              ) : null}
+            </>
+          )}
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

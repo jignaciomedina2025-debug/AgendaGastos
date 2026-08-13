@@ -22,6 +22,21 @@ export interface Family {
   createdAt: Date;
 }
 
+/** Saved household payment method (card / store credit). */
+export interface PaymentCard {
+  id: string;
+  familyId: string;
+  /** User who created this card entry. */
+  userId: string;
+  /** Brand or store: CMR, Ripley, Tricot, Visa, etc. */
+  brand: string;
+  /** Last 4 digits only. */
+  lastFour: string;
+  /** Optional nickname, e.g. "CMR José". */
+  label?: string;
+  createdAt: Date;
+}
+
 export type InterestType = "NO_INTEREST" | "WITH_INTEREST";
 
 export type PurchaseStatus = "CONFIRMED" | "PENDING_CONFIRMATION";
@@ -32,8 +47,10 @@ export interface Purchase {
   userId: string;
   familyId: string;
   title: string;
-  /** Card or store used for the purchase. */
+  /** Card or store used for the purchase (display label). */
   cardOrStore: string;
+  /** Optional link to a saved PaymentCard. */
+  cardId?: string;
   totalAmount: number;
   installmentsCount: number;
   /** Exact installment value, or estimated when interest is unknown. */

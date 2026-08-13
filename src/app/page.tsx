@@ -5,16 +5,19 @@ import { LogOut } from "lucide-react";
 import { AuthScreen } from "@/components/auth/AuthScreen";
 import { FamilyDashboard } from "@/components/dashboard/FamilyDashboard";
 import { PersonalDashboard } from "@/components/dashboard/PersonalDashboard";
+import { CardsManager } from "@/components/forms/CardsManager";
 import { PurchaseForm } from "@/components/forms/PurchaseForm";
 import { useAuth } from "@/context/AuthContext";
+import { getFamilyCards } from "@/services/cardService";
 import { getFamilyPurchases } from "@/services/purchaseService";
-import type { Purchase } from "@/types/finance";
+import type { PaymentCard, Purchase } from "@/types/finance";
 
-type TabId = "personal" | "family" | "new";
+type TabId = "personal" | "family" | "cards" | "new";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "personal", label: "Personal" },
   { id: "family", label: "Familia" },
+  { id: "cards", label: "Tarjetas" },
   { id: "new", label: "Nueva" },
 ];
 
@@ -28,6 +31,7 @@ export default function HomePage() {
     useAuth();
   const [tab, setTab] = useState<TabId>("personal");
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [cards, setCards] = useState<PaymentCard[]>([]);
   const [loadingPurchases, setLoadingPurchases] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const monthYear = currentMonthYear();
@@ -49,14 +53,24 @@ export default function HomePage() {
     setLoadingPurchases(false);
   }, [profile, family, monthYear]);
 
+  const reloadCards = useCallback(async () => {
+    if (!family) return;
+    const result = await getFamilyCards(family.id);
+    if (result.success) {
+      setCards(result.data);
+    }
+  }, [family]);
+
   useEffect(() => {
     if (!profile || !family) {
       setPurchases([]);
+      setCards([]);
       return;
     }
     void reloadPurchases();
+    void reloadCards();
     void refreshFamilyMembers();
-  }, [profile, family, reloadPurchases, refreshFamilyMembers]);
+  }, [profile, family, reloadPurchases, reloadCards, refreshFamilyMembers]);
 
   if (loading) {
     return (
@@ -104,7 +118,7 @@ export default function HomePage() {
         className="sticky top-0 z-10 -mx-4 mb-6 border-b border-[#d7e0db]/80 bg-[#f3f6f4]/90 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
         aria-label="Secciones"
       >
-        <div className="mx-auto flex max-w-lg gap-2">
+        <div className="mx-auto flex max-w-lg gap-1.5 overflow-x-auto">
           {TABS.map((item) => {
             const active = tab === item.id;
             return (
@@ -113,7 +127,7 @@ export default function HomePage() {
                 type="button"
                 onClick={() => setTab(item.id)}
                 className={[
-                  "flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                  "shrink-0 rounded-xl px-3 py-2.5 text-sm font-medium transition",
                   active
                     ? "bg-teal-700 text-white shadow-sm"
                     : "bg-white text-[#5b6b64] ring-1 ring-[#d7e0db]",
@@ -132,7 +146,7 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {loadingPurchases ? (
+      {loadingPurchases && (tab === "personal" || tab === "family") ? (
         <div className="mx-auto flex w-full max-w-lg items-center gap-3 text-sm text-[#5b6b64]">
           <span className="size-4 animate-spin rounded-full border-2 border-teal-700/30 border-t-teal-700" />
           Cargando compras…
@@ -156,11 +170,22 @@ export default function HomePage() {
         />
       ) : null}
 
+      {tab === "cards" ? (
+        <CardsManager
+          familyId={family.id}
+          currentUserId={profile.id}
+          cards={cards}
+          onChanged={() => void reloadCards()}
+        />
+      ) : null}
+
       {tab === "new" ? (
         <PurchaseForm
           currentUserId={profile.id}
           familyId={family.id}
           familyMembers={familyMembers}
+          cards={cards}
+          onRequestAddCard={() => setTab("cards")}
           onSuccess={() => {
             void reloadPurchases();
             setTab("personal");
