@@ -11,7 +11,7 @@ import {
   type DocumentData,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getFirestoreDb } from "@/lib/firebase";
 import type {
   FamilyPurchasesResult,
   NewPurchaseInput,
@@ -205,7 +205,7 @@ export async function addPurchase(
       createdAt: Timestamp.fromDate(createdAt),
     };
 
-    const docRef = await addDoc(collection(db, PURCHASES_COLLECTION), payload);
+    const docRef = await addDoc(collection(getFirestoreDb(), PURCHASES_COLLECTION), payload);
 
     const purchase: Purchase = {
       id: docRef.id,
@@ -257,7 +257,7 @@ export async function updatePurchaseInstallment(
       };
     }
 
-    const purchaseRef = doc(db, PURCHASES_COLLECTION, purchaseId);
+    const purchaseRef = doc(getFirestoreDb(), PURCHASES_COLLECTION, purchaseId);
     const currentSnap = await getDoc(purchaseRef);
 
     if (!currentSnap.exists()) {
@@ -329,7 +329,7 @@ export async function getFamilyPurchases(
 
     // Scoped to household; installment window filtered in memory.
     const purchasesQuery = query(
-      collection(db, PURCHASES_COLLECTION),
+      collection(getFirestoreDb(), PURCHASES_COLLECTION),
       where("familyId", "==", familyId),
       where("firstBillingMonth", "<=", monthYear),
     );

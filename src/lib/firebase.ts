@@ -11,13 +11,21 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-function hasFirebaseConfig(): boolean {
-  return Object.values(firebaseConfig).every(Boolean);
-}
-
 let app: FirebaseApp | null = null;
 let authInstance: Auth | null = null;
 let dbInstance: Firestore | null = null;
+
+function assertFirebaseConfig(): void {
+  const missing = Object.entries(firebaseConfig)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing NEXT_PUBLIC_FIREBASE_* env vars: ${missing.join(", ")}.`,
+    );
+  }
+}
 
 export function getFirebaseApp(): FirebaseApp {
   if (app) return app;
@@ -27,12 +35,7 @@ export function getFirebaseApp(): FirebaseApp {
     return app;
   }
 
-  if (!hasFirebaseConfig()) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_FIREBASE_* env vars. Add them in Cloudflare Pages or .env.production.",
-    );
-  }
-
+  assertFirebaseConfig();
   app = initializeApp(firebaseConfig);
   return app;
 }
@@ -50,17 +53,3 @@ export function getFirestoreDb(): Firestore {
   }
   return dbInstance;
 }
-
-/** @deprecated Prefer getFirebaseAuth() — kept for shorter imports. */
-export const auth: Auth = new Proxy({} as Auth, {
-  get(_target, property, receiver) {
-    return Reflect.get(getFirebaseAuth() as object, property, receiver);
-  },
-});
-
-/** @deprecated Prefer getFirestoreDb() — kept for shorter imports. */
-export const db: Firestore = new Proxy({} as Firestore, {
-  get(_target, property, receiver) {
-    return Reflect.get(getFirestoreDb() as object, property, receiver);
-  },
-});

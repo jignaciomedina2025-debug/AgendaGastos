@@ -9,7 +9,7 @@ import {
   where,
   type DocumentData,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getFirestoreDb } from "@/lib/firebase";
 import type { Family, ServiceResult, User } from "@/types/finance";
 
 const USERS_COLLECTION = "users";
@@ -49,7 +49,7 @@ function generateInviteCode(): string {
 
 export async function getUserProfile(userId: string): Promise<ServiceResult<User>> {
   try {
-    const snap = await getDoc(doc(db, USERS_COLLECTION, userId));
+    const snap = await getDoc(doc(getFirestoreDb(), USERS_COLLECTION, userId));
     if (!snap.exists()) {
       return { success: false, error: "Perfil no encontrado." };
     }
@@ -64,7 +64,7 @@ export async function getUserProfile(userId: string): Promise<ServiceResult<User
 
 export async function getFamilyById(familyId: string): Promise<ServiceResult<Family>> {
   try {
-    const snap = await getDoc(doc(db, FAMILIES_COLLECTION, familyId));
+    const snap = await getDoc(doc(getFirestoreDb(), FAMILIES_COLLECTION, familyId));
     if (!snap.exists()) {
       return { success: false, error: "Familia no encontrada." };
     }
@@ -88,7 +88,7 @@ export async function findFamilyByInviteCode(
 
     const snap = await getDocs(
       query(
-        collection(db, FAMILIES_COLLECTION),
+        collection(getFirestoreDb(), FAMILIES_COLLECTION),
         where("inviteCode", "==", normalized),
       ),
     );
@@ -117,7 +117,7 @@ export async function getFamilyMembers(
     }
 
     const snap = await getDocs(
-      query(collection(db, USERS_COLLECTION), where("familyId", "==", familyId)),
+      query(collection(getFirestoreDb(), USERS_COLLECTION), where("familyId", "==", familyId)),
     );
 
     const members = snap.docs
@@ -166,7 +166,7 @@ export async function createUserProfileWithFamily(
       if (!found.success) return found;
       family = found.data;
     } else {
-      const familyRef = doc(collection(db, FAMILIES_COLLECTION));
+      const familyRef = doc(collection(getFirestoreDb(), FAMILIES_COLLECTION));
       const inviteCode = generateInviteCode();
       const familyPayload = {
         name: (input.familyName?.trim() || `Familia de ${name}`).slice(0, 80),
@@ -186,7 +186,7 @@ export async function createUserProfileWithFamily(
       createdAt: now,
     };
 
-    await setDoc(doc(db, USERS_COLLECTION, input.uid), userPayload, {
+    await setDoc(doc(getFirestoreDb(), USERS_COLLECTION, input.uid), userPayload, {
       merge: true,
     });
 

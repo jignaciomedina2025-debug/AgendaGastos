@@ -6,7 +6,7 @@ import {
   updateProfile,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { getFirebaseAuth } from "@/lib/firebase";
 import type { Family, ServiceResult, User } from "@/types/finance";
 import {
   createUserProfileWithFamily,
@@ -39,8 +39,17 @@ function mapAuthError(error: unknown): string {
       return "Email o contraseña incorrectos.";
     case "auth/too-many-requests":
       return "Demasiados intentos. Espera un momento e inténtalo de nuevo.";
+    case "auth/operation-not-allowed":
+      return "Email/contraseña no está habilitado en Firebase Authentication.";
+    case "auth/unauthorized-domain":
+      return "Este dominio no está autorizado en Firebase Authentication.";
+    case "auth/api-key-not-valid.--please-pass-a-valid-api-key.":
+    case "auth/invalid-api-key":
+      return "API key de Firebase inválida.";
     default:
-      return error.message || "Error de autenticación.";
+      return code
+        ? `${error.message} (${code})`
+        : error.message || "Error de autenticación.";
   }
 }
 
@@ -53,7 +62,7 @@ export async function registerWithEmail(input: {
 }): Promise<ServiceResult<AuthSession>> {
   try {
     const credential = await createUserWithEmailAndPassword(
-      auth,
+      getFirebaseAuth(),
       input.email.trim(),
       input.password,
     );
@@ -69,7 +78,7 @@ export async function registerWithEmail(input: {
     });
 
     if (!profileResult.success) {
-      await signOut(auth);
+      await signOut(getFirebaseAuth());
       return profileResult;
     }
 
@@ -96,14 +105,14 @@ export async function loginWithEmail(
 ): Promise<ServiceResult<AuthSession>> {
   try {
     const credential = await signInWithEmailAndPassword(
-      auth,
+      getFirebaseAuth(),
       email.trim(),
       password,
     );
 
     const session = await loadSession(credential.user);
     if (!session.success) {
-      await signOut(auth);
+      await signOut(getFirebaseAuth());
       return session;
     }
 
@@ -115,7 +124,7 @@ export async function loginWithEmail(
 
 export async function logout(): Promise<ServiceResult<null>> {
   try {
-    await signOut(auth);
+    await signOut(getFirebaseAuth());
     return { success: true, data: null };
   } catch (error) {
     return {
@@ -159,5 +168,5 @@ export async function loadSession(
 export function subscribeToAuth(
   onChange: (user: FirebaseUser | null) => void,
 ): () => void {
-  return onAuthStateChanged(auth, onChange);
+  return onAuthStateChanged(getFirebaseAuth(), onChange);
 }
